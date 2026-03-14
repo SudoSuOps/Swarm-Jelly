@@ -263,7 +263,7 @@ def audit_file(path: str) -> dict:
     for _, rec in records:
         msgs = rec.get("messages", [])
         assistant = next((m["content"] for m in msgs if m.get("role") == "assistant"), "")
-        fp = hashlib.md5(assistant.strip().lower().encode()).hexdigest()
+        fp = hashlib.sha256(assistant.strip().lower().encode()).hexdigest()
         if fp in fps:
             dupes += 1
         fps.add(fp)

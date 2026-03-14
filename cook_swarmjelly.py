@@ -198,13 +198,13 @@ def load_judge_traces(judge_dir: Path, cap: int = 0) -> list[dict]:
 
 
 def dedup_pairs(pairs: list[dict]) -> list[dict]:
-    """Dedup by MD5 of assistant content."""
+    """Dedup by SHA256 of assistant content (aligned with RJP-1 fingerprinting)."""
     seen = set()
     clean = []
     for p in pairs:
         msgs = p["messages"]
         assistant = next((m["content"] for m in msgs if m["role"] == "assistant"), "")
-        fp = hashlib.md5(assistant.strip().lower().encode()).hexdigest()
+        fp = hashlib.sha256(assistant.strip().lower().encode()).hexdigest()
         if fp not in seen:
             seen.add(fp)
             clean.append(p)
