@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+*.gguf
+*.safetensors
+*.bin
+merged/
+lora/
+logs/
+*.log
+.cook_state.json
