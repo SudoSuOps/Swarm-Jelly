@@ -216,6 +216,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--include-judge", type=str, help="Path to judge traces dir")
     parser.add_argument("--judge-cap", type=int, default=50000, help="Max judge traces (stratified sample)")
+    parser.add_argument("--max-total", type=int, default=0, help="Max total pairs after dedup (0=unlimited)")
     parser.add_argument("--eval-ratio", type=float, default=EVAL_RATIO)
     parser.add_argument("--seed", type=int, default=SEED)
     args = parser.parse_args()
@@ -266,6 +267,19 @@ def main():
     dupes = len(all_pairs) - len(clean)
     print(f"    Removed {dupes:,} duplicates ({dupes/len(all_pairs)*100:.1f}%)")
     print(f"    Clean:  {len(clean):,}")
+
+    # Total cap (stratified by source to maintain balance)
+    if args.max_total > 0 and len(clean) > args.max_total:
+        random.seed(args.seed)
+        random.shuffle(clean)
+        clean = clean[:args.max_total]
+        print(f"    Capped to {len(clean):,} total pairs")
+
+        # Recount source distribution after cap
+        sources = Counter(p["metadata"]["source"] for p in clean)
+        print("  Source distribution (post-cap):")
+        for src, count in sources.most_common():
+            print(f"    {src:20s} {count:8,}")
 
     if args.dry_run:
         print(f"\n  DRY RUN — would write {len(clean):,} pairs")
