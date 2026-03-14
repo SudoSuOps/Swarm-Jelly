@@ -121,6 +121,65 @@ def validate_data(train_path: str, eval_path: str):
     }
 
 
+def push_model_lineage(manifest: dict, data_info: dict) -> dict | None:
+    """Push model training lineage to hive-ledger.
+
+    Uses a deterministic batch_id derived from the training data SHA-256
+    (already in data_info). This can be reconciled with actual batch IDs later.
+
+    Returns the API response dict, or None if push is skipped/fails.
+    """
+    import urllib.error
+    import urllib.request
+
+    ledger_url = os.environ.get("HIVE_LEDGER_URL", "https://ledger.swarmandbee.ai")
+    admin_key = os.environ.get("HIVE_ADMIN_KEY", "")
+
+    if not admin_key:
+        print("  [ledger] HIVE_ADMIN_KEY not set — skipping model registration")
+        return None
+
+    # Derive batch_id from training data hash
+    train_hash = data_info.get("train_sha256", "")
+    if not train_hash:
+        train_hash = hashlib.sha256(TRAIN_FILE.encode()).hexdigest()
+    batch_id = f"BATCH-SJ4-{train_hash[:12]}"
+
+    body = {
+        "model_id": manifest["model"],
+        "batch_id": batch_id,
+        "training_run_id": f"run-{manifest.get('completed_at', '')[:10]}",
+        "pairs_used": data_info.get("train_count", 0),
+        "loss": manifest.get("training", {}).get("final_loss", 0),
+        "eval_loss": 0,  # Added if eval is run
+        "trained_at": manifest.get("completed_at", ""),
+    }
+
+    payload = json.dumps(body).encode()
+    req = urllib.request.Request(
+        f"{ledger_url}/api/admin/model",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-Admin-Key": admin_key,
+            "User-Agent": "SwarmJelly/1.0",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read())
+            return result
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode()
+        print(f"  [ledger] HTTP {e.code}: {err_body}")
+        return None
+    except Exception as e:
+        print(f"  [ledger] Push failed: {e}")
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=f"Train {BUILD_NAME}")
     parser.add_argument("--smoke-test", action="store_true")
@@ -354,6 +413,11 @@ def main():
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
     print(f"  Manifest: {manifest_path}")
+
+    # ── Push model lineage to hive-ledger ──
+    push_result = push_model_lineage(manifest, data_info)
+    if push_result:
+        print(f"  Ledger: {push_result}")
 
     print(f"\n  Next steps:")
     print(f"  1. Fix vision config if needed")
