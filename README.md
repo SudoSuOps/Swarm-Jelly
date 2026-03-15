@@ -236,12 +236,28 @@ Dashboard
 | Inference | swarmrails CPU (bf16/Q8_0) | Backup |
 | Inference | Any 8GB+ GPU (bf16) | Universal |
 
-### Post-Training Pipeline
+### Self-Healing Pipeline (`pipeline_swarmjelly.py`)
 
-1. Fix vision config if needed (Qwen3.5 VL artifact)
-2. Quantize: `llama-quantize /data2/swarmjelly-4b/merged swarmjelly-4b-q4_k_m.gguf Q4_K_M`
-3. Deploy on Jetson edge or swarmrails CPU
-4. Wire into PropolisCollector → SwarmJelly → vet pipeline → ledger
+The pipeline closes the self-healing loop: propolis → inference → vet → stamp → ledger.
+
+```bash
+# Start llama-server
+llama-server -m /data2/swarmjelly-4b/swarmjelly-4b-q4_k_m.gguf -c 8192 --port 8085 -ngl 99
+
+# Check connectivity
+python3 pipeline_swarmjelly.py --check
+
+# Process propolis failures → 5× Royal Jelly pairs each
+python3 pipeline_swarmjelly.py --api-url http://localhost:8085
+
+# Backfill existing IRO data (skips inference)
+python3 pipeline_swarmjelly.py --backfill-dir ~/swarm_cooks/nuked_selfheal/
+
+# Push stamped cells to hive-ledger
+python3 pipeline_swarmjelly.py --push-only
+```
+
+Output lands in `pipeline_output/` with `raw/`, `vetted/`, `cells/` subdirectories. State tracking in `state.json` ensures idempotent re-runs.
 
 ### Hive-Ledger Integration
 
@@ -312,6 +328,7 @@ CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1 python3 train_swarmjelly_4b.
 | `cook_swarmjelly.py` | Dataset assembly — IRO→messages conversion, dedup, stratified sampling, 90/10 split |
 | `validate_swarmjelly.py` | Pre-cook dataset audit — 9 validation gates |
 | `train_swarmjelly_4b.py` | Gold Standard training script — LoRA, packing, early stopping, ledger push, manifest |
+| `pipeline_swarmjelly.py` | Self-healing pipeline — propolis → inference → vet → stamp → ledger push |
 
 ### Output Artifacts
 
@@ -323,6 +340,8 @@ CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1 python3 train_swarmjelly_4b.
 | `/data2/swarmjelly-4b/merged/` | Merged bf16 model (base + adapter) |
 | `/data2/swarmjelly-4b/logs/` | Training logs |
 | `/data2/swarmjelly-4b/MANIFEST.json` | Full training manifest with metadata |
+| `/data2/swarmjelly-4b/swarmjelly-4b-bf16.gguf` | Full precision GGUF (7.9 GB) |
+| `/data2/swarmjelly-4b/swarmjelly-4b-q4_k_m.gguf` | Quantized GGUF for deployment (2.6 GB, 5.13 BPW) |
 
 ---
 
